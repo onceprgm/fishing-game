@@ -97,6 +97,18 @@ async def clear_cast(user_id: int) -> None:
         await conn.commit()
 
 
+async def claim_cast(user_id: int, now: float) -> bool:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            "UPDATE players "
+            "SET cast_location = NULL, cast_ready_at = NULL, cast_notified = 0 "
+            "WHERE user_id = ? AND cast_ready_at IS NOT NULL AND cast_ready_at <= ?",
+            (user_id, now),
+        )
+        await conn.commit()
+        return cursor.rowcount == 1
+
+
 async def due_casts(now: float) -> list[aiosqlite.Row]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

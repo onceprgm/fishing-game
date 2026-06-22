@@ -33,13 +33,16 @@ async def handle_cast(callback: CallbackQuery) -> None:
     ready_at = datetime.now(timezone.utc).timestamp() + location.timer_seconds
     await db.start_cast(user.id, location.key, ready_at)
     await callback.message.edit_text(
-        i18n.t("line_cast", lang).format(minutes=location.timer_seconds // 60),
+        i18n.t("line_cast", lang).format(
+            location=i18n.t(f"location_{location.key}", lang),
+            minutes=location.timer_seconds // 60,
+        ),
         reply_markup=waiting_keyboard(lang),
     )
     await callback.answer()
 
 
-async def _resolve_pull(
+async def cast_status(
     user_id: int, username: str | None
 ) -> tuple[str, InlineKeyboardMarkup]:
     player = await db.get_or_create_player(user_id, username)
@@ -49,16 +52,30 @@ async def _resolve_pull(
     now = datetime.now(timezone.utc).timestamp()
     if now < player["cast_ready_at"]:
         remaining = int(player["cast_ready_at"] - now)
-        text = i18n.t("still_waiting", lang).format(seconds=remaining)
-        return text, waiting_keyboard(lang)
+        return i18n.t("still_waiting", lang).format(seconds=remaining), waiting_keyboard(lang)
+    return i18n.t("bite", lang), waiting_keyboard(lang)
+
+
+async def _pull(
+    user_id: int, username: str | None
+) -> tuple[str, InlineKeyboardMarkup]:
+    player = await db.get_or_create_player(user_id, username)
+    lang = _language(player)
+    if player["cast_ready_at"] is None:
+        return i18n.t("nothing_cast", lang), main_menu_keyboard(lang)
+    now = datetime.now(timezone.utc).timestamp()
+    if now < player["cast_ready_at"]:
+        remaining = int(player["cast_ready_at"] - now)
+        return i18n.t("still_waiting", lang).format(seconds=remaining), waiting_keyboard(lang)
     location = LOCATIONS.get(player["cast_location"])
     if location is None:
         await db.clear_cast(user_id)
         return i18n.t("nothing_cast", lang), main_menu_keyboard(lang)
+    if not await db.claim_cast(user_id, now):
+        return i18n.t("nothing_cast", lang), main_menu_keyboard(lang)
     catch = loot.roll_catch(location)
     caught_at = datetime.now(timezone.utc).isoformat()
     await db.record_catch(user_id, catch, location.key, caught_at)
-    await db.clear_cast(user_id)
     text = i18n.t("caught", lang).format(
         species=i18n.t(f"species_{catch.species}", lang),
         rarity=i18n.t(f"rarity_{catch.rarity}", lang),
@@ -69,7 +86,7 @@ async def _resolve_pull(
 
 @router.callback_query(F.data == "pull")
 async def handle_pull(callback: CallbackQuery) -> None:
-    text, keyboard = await _resolve_pull(
+    text, keyboard = await _pull(
         callback.from_user.id, callback.from_user.username
     )
     await callback.message.edit_text(text, reply_markup=keyboard)
@@ -78,7 +95,7 @@ async def handle_pull(callback: CallbackQuery) -> None:
 
 @router.message(Command("check"))
 async def handle_check(message: Message) -> None:
-    text, keyboard = await _resolve_pull(
+    text, keyboard = await cast_status(
         message.from_user.id, message.from_user.username
     )
     await message.answer(text, reply_markup=keyboard)

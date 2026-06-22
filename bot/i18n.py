@@ -15,9 +15,10 @@ TEXTS = {
         "en": "🎣 Pull!",
     },
     "line_cast": {
-        "ru": "Закинул удочку в пруд. Возвращайся через {minutes} мин.",
-        "en": "Line cast at the pond. Come back in {minutes} min.",
+        "ru": "Удочка заброшена ({location}). Возвращайся через {minutes} мин.",
+        "en": "Line cast ({location}). Come back in {minutes} min.",
     },
+    "location_pond": {"ru": "пруд", "en": "pond"},
     "bite": {
         "ru": "🐟 Клёв! Пора тащить!",
         "en": "🐟 Bite! Time to pull!",
