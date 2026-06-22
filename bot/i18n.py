@@ -18,6 +18,10 @@ TEXTS = {
         "ru": "Закинул удочку в пруд. Возвращайся через {minutes} мин.",
         "en": "Line cast at the pond. Come back in {minutes} min.",
     },
+    "bite": {
+        "ru": "🐟 Клёв! Пора тащить!",
+        "en": "🐟 Bite! Time to pull!",
+    },
     "still_waiting": {
         "ru": "Пока не клюёт... осталось ~{seconds} с.",
         "en": "Not biting yet... ~{seconds}s left.",

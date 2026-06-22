@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS players (
     coins INTEGER NOT NULL DEFAULT 0,
     cast_location TEXT,
     cast_ready_at REAL,
+    cast_notified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 
@@ -33,9 +34,19 @@ CREATE TABLE IF NOT EXISTS catches (
 """
 
 
+async def _column_exists(conn: aiosqlite.Connection, table: str, column: str) -> bool:
+    async with conn.execute(f"PRAGMA table_info({table})") as cursor:
+        return any(row[1] == column for row in await cursor.fetchall())
+
+
 async def init_db() -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.executescript(SCHEMA)
+        if not await _column_exists(conn, "players", "cast_notified"):
+            await conn.execute(
+                "ALTER TABLE players "
+                "ADD COLUMN cast_notified INTEGER NOT NULL DEFAULT 0"
+            )
         await conn.commit()
 
 
@@ -67,7 +78,8 @@ async def set_language(user_id: int, language: str) -> None:
 async def start_cast(user_id: int, location: str, ready_at: float) -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
-            "UPDATE players SET cast_location = ?, cast_ready_at = ? "
+            "UPDATE players "
+            "SET cast_location = ?, cast_ready_at = ?, cast_notified = 0 "
             "WHERE user_id = ?",
             (location, ready_at, user_id),
         )
@@ -77,8 +89,30 @@ async def start_cast(user_id: int, location: str, ready_at: float) -> None:
 async def clear_cast(user_id: int) -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
-            "UPDATE players SET cast_location = NULL, cast_ready_at = NULL "
+            "UPDATE players "
+            "SET cast_location = NULL, cast_ready_at = NULL, cast_notified = 0 "
             "WHERE user_id = ?",
+            (user_id,),
+        )
+        await conn.commit()
+
+
+async def due_casts(now: float) -> list[aiosqlite.Row]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            "SELECT user_id, language FROM players "
+            "WHERE cast_ready_at IS NOT NULL AND cast_ready_at <= ? "
+            "AND cast_notified = 0",
+            (now,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def mark_notified(user_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE players SET cast_notified = 1 WHERE user_id = ?",
             (user_id,),
         )
         await conn.commit()
